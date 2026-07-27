@@ -1,0 +1,153 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: >-
+          python -m pip install
+          --requirement requirements.txt
+          --requirement requirements-dev.txt
+
+      - name: Validate release contents
+        run: python scripts/validate_release.py
+
+      - name: Validate PowerShell launchers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $scripts = @(
+            "scripts/setup.ps1",
+            "scripts/path-guard.ps1",
+            "scripts/test-path-guard.ps1",
+            ".agents/skills/adaptive-study-coach/scripts/run-study.ps1"
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path -LiteralPath $script),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$script`: $($_.Message)" }
+              exit 1
+            }
+          }
+
+      - name: Test PowerShell path confinement
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass
+          -File scripts/test-path-guard.ps1
+
+      - name: Reject PowerShell setup on non-Windows
+        if: runner.os == 'Linux'
+        shell: pwsh
+        run: |
+          try {
+            & ./scripts/setup.ps1 -SkipInit
+          }
+          catch {
+            if ($_.Exception.Message -notmatch "supports Windows only") {
+              throw
+            }
+            Write-Output "POWERSHELL_PLATFORM_GUARD=PASS"
+            exit 0
+          }
+          throw "setup.ps1 unexpectedly ran on a non-Windows host."
+
+      - name: Validate Bash launchers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: >-
+          bash -n
+          scripts/setup.sh
+          .agents/skills/adaptive-study-coach/scripts/run-study.sh
+
+      - name: Test Bash path confinement
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          outside="$(mktemp -d)"
+          link="${PWD}/.launcher-link-test"
+          cleanup() {
+            rm -f -- "${link}"
+            rmdir -- "${outside}"
+          }
+          trap cleanup EXIT
+          ln -s -- "${outside}" "${link}"
+          if ADAPTIVE_STUDY_HOME="${link}" bash ./scripts/setup.sh --skip-init; then
+            echo "setup.sh accepted a data-home symlink that escapes the repository" >&2
+            exit 1
+          fi
+          echo "BASH_PATH_GUARD=PASS"
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Check formatting
+        run: python -m ruff format --check .
+
+      - name: Type check
+        run: >-
+          python -m mypy
+          scripts
+          .agents/skills/adaptive-study-coach/scripts
+
+      - name: Scan secrets
+        run: python scripts/check_secrets.py
+
+      - name: Run SAST
+        run: >-
+          python -m bandit
+          -c pyproject.toml
+          -r scripts .agents/skills/adaptive-study-coach/scripts
+          -x .agents/skills/adaptive-study-coach/scripts/test_prepare_scan.py,.agents/skills/adaptive-study-coach/scripts/test_study_coach.py
+
+      - name: Run tests with branch coverage
+        run: >-
+          python -m coverage run
+          --branch
+          --source .agents/skills/adaptive-study-coach/scripts
+          -m unittest discover
+          -s .agents/skills/adaptive-study-coach/scripts
+          -p "test_*.py"
+          -v
+
+      - name: Enforce coverage
+        run: >-
+          python -m coverage report
+          --omit "*/test_*.py"
+          --show-missing
+          --fail-under=70

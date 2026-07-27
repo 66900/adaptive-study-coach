@@ -1,0 +1,41 @@
+# Repository-local study data
+/adaptive-study-data/
+/.adaptive-study-data/
+/学习系统/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+.secrets-scan.json
+.venv/
+venv/
+
+# Generated learning artifacts
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.onnx
+backups/
+imports/
+reports/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment files
+.env
+.env.*
+!.env.example

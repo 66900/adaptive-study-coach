@@ -1,0 +1,4 @@
+interface:
+  display_name: "自适应学习复习教练"
+  short_description: "模糊图片本地增强识别、多学科导入、FSRS复习与测试"
+  default_prompt: "使用 $adaptive-study-coach 先在本地增强并识别我上传的学习图片，再导入可靠内容并开始到期复习。"
