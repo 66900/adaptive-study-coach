@@ -21,7 +21,12 @@ def main() -> int:
             "scan",
             "--all-files",
             "--exclude-files",
-            r"(^|[\\/])(\.git|adaptive-study-data)([\\/]|$)",
+            (
+                r"(^|[\\/])("
+                r"\.git|adaptive-study-data|\.mypy_cache|\.ruff_cache|"
+                r"\.pytest_cache|__pycache__|\.venv|venv"
+                r")([\\/]|$)"
+            ),
         ],
         cwd=REPO_ROOT,
         check=False,

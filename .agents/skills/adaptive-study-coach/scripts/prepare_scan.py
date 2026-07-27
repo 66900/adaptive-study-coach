@@ -125,7 +125,10 @@ def total_memory_gb() -> float:
 
         status = MemoryStatus()
         status.length = ctypes.sizeof(MemoryStatus)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        windows_dll: Any = getattr(ctypes, "windll", None)
+        if windows_dll is not None and windows_dll.kernel32.GlobalMemoryStatusEx(
+            ctypes.byref(status)
+        ):
             return round(status.total_phys / (1024**3), 2)
     try:
         system_os: Any = os
